@@ -67,9 +67,8 @@ class DkOrientationSensorManager @JvmOverloads constructor(context: Context, lis
 		fun onSensorOrientationChanged(azimuth: Double, pitch: Double, roll: Double, inclination: Double)
 	}
 
-	// For filter raw values from sensors
-	var isApplyLowFilter = true
-		private set
+	// Low filter will make data get from sensor smoothly
+	var applyLowFilter = true
 
 	/**
 	 * Specify percent-amount of raw values from Sensors to add to current values.
@@ -91,7 +90,7 @@ class DkOrientationSensorManager @JvmOverloads constructor(context: Context, lis
 	var sensorDelay = SensorManager.SENSOR_DELAY_UI
 
 	private val sensorManager: SensorManager
-	private val listeners: MutableList<Listener> = ArrayList()
+	private val listeners = mutableListOf<Listener>()
 	private val defaultDisplay: Display
 
 	private var hasAcc = false
@@ -127,13 +126,13 @@ class DkOrientationSensorManager @JvmOverloads constructor(context: Context, lis
 	override fun onSensorChanged(event: SensorEvent) {
 		when (event.sensor.type) {
 			Sensor.TYPE_GRAVITY, Sensor.TYPE_ACCELEROMETER -> {
-				if (isApplyLowFilter) {
+				if (applyLowFilter) {
 					applyLowFilter(event.values, accVals)
 				}
 				hasAcc = true
 			}
 			Sensor.TYPE_MAGNETIC_FIELD -> {
-				if (isApplyLowFilter) {
+				if (applyLowFilter) {
 					applyLowFilter(event.values, magVals)
 				}
 				hasMag = true
