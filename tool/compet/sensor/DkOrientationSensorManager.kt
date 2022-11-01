@@ -11,7 +11,9 @@ import android.hardware.SensorManager
 import android.view.Display
 import android.view.Surface
 import android.view.WindowManager
+import kotlin.math.abs
 import kotlin.math.min
+import kotlin.math.sqrt
 
 /**
  * To get orientation of the device with earth north pole, we just need 2 sensors
@@ -59,12 +61,13 @@ class DkOrientationSensorManager @JvmOverloads constructor(context: Context, lis
 		fun onSensorAccuracyChanged(accuracy: Int)
 
 		/**
-		 * @param azimuth     (in radian) rotation around z-axis, diff angle with earth's north pole.
-		 * @param pitch       (in radian) rotation around x-axis (east pole).
-		 * @param roll        (in radian) rotation around y-axis (north pole).
-		 * @param inclination diff with true north, see #GeomagneticField
+		 * @param azimuth     (in radian, range [-pi, pi]) rotation around z-axis, diff angle with earth's north pole.
+		 * @param pitch       (in radian, range [-pi/2, pi/2]) rotation around x-axis (east pole).
+		 * @param roll        (in radian, range [-pi, pi]) rotation around y-axis (north pole).
+		 * @param inclination (in radian, range [-pi/2, pi/2]) diff between earth's surface and magnetic fields.
+		 * For declination (diff between true-north with compass's magnetic north) see #GeomagneticField.
 		 */
-		fun onSensorOrientationChanged(azimuth: Double, pitch: Double, roll: Double, inclination: Double)
+		fun onSensorOrientationChanged(azimuth: Float, pitch: Float, roll: Float, inclination: Float)
 	}
 
 	// Low filter will make data get from sensor smoothly
@@ -151,11 +154,12 @@ class DkOrientationSensorManager @JvmOverloads constructor(context: Context, lis
 				remapCoordinateSystem(incMatrix, incMatrixAdjusted)
 				val orientations = SensorManager.getOrientation(rotMatrixAdjusted, orientations)
 				val inclination = SensorManager.getInclination(incMatrixAdjusted)
-				val azimuth = orientations[0].toDouble()
-				val pitch = orientations[1].toDouble()
-				val roll = orientations[2].toDouble()
+				val azimuth = orientations[0]
+				val pitch = orientations[1]
+				val roll = orientations[2]
+
 				for (listener in listeners) {
-					listener.onSensorOrientationChanged(azimuth, pitch, roll, inclination.toDouble())
+					listener.onSensorOrientationChanged(azimuth, pitch, roll, inclination)
 				}
 			}
 		}
@@ -236,9 +240,48 @@ class DkOrientationSensorManager @JvmOverloads constructor(context: Context, lis
 	/**
 	 * See https://en.wikipedia.org/wiki/Low-pass_filter#Discrete-time_realization
 	 */
-	private fun applyLowFilter(nextVals: FloatArray, curVals: FloatArray) {
+	private fun __applyLowFilter(nextVals: FloatArray, curVals: FloatArray) {
 		for (i in min(nextVals.size, curVals.size) - 1 downTo 0) {
-			curVals[i] += smoothAlpha * (nextVals[i] - curVals[i])
+			curVals[i] = nextVals[i]
+			//curVals[i] += smoothAlpha * (nextVals[i] - curVals[i])
 		}
+	}
+
+	// For high pass filter
+	private val ADAPTIVE_ACCEL_FILTER = true
+	val updateFreq = 30f // match this to your update speed
+	val cutOffFreq = 0.9f
+	val RC = 1.0f / cutOffFreq
+	val dt = 1.0f / updateFreq
+	val filterConstant = RC / (dt + RC)
+	val kAccelerometerMinStep = 0.033f
+	val kAccelerometerNoiseAttenuation = 3.0f
+
+	private fun applyLowFilter(nextVals: FloatArray, curVals: FloatArray) {
+		// High pass filter
+		var alpha = filterConstant
+
+		if (ADAPTIVE_ACCEL_FILTER) {
+			val d = clamp(
+				abs(
+					norm(curVals[0], curVals[1], curVals[2]) - norm(nextVals[0], nextVals[1], nextVals[2])
+				) / kAccelerometerMinStep - 1.0f,
+				0.0f,
+				1.0f
+			)
+			alpha = d * filterConstant / kAccelerometerNoiseAttenuation + (1.0f - d) * filterConstant
+		}
+
+		for (index in 0..2) {
+			curVals[index] = alpha * nextVals[index] + (1f - alpha) * curVals[index]
+		}
+	}
+
+	fun norm(x: Float, y: Float, z: Float): Float {
+		return sqrt(x * x + y * y + z * z)
+	}
+
+	fun clamp(v: Float, min: Float, max: Float): Float {
+		return if (v > max) max else if (v < min) min else v
 	}
 }
