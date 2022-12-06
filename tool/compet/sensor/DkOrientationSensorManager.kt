@@ -11,7 +11,6 @@ import android.hardware.SensorManager
 import android.view.Display
 import android.view.Surface
 import android.view.WindowManager
-import kotlin.math.abs
 import kotlin.math.min
 import kotlin.math.sqrt
 
@@ -240,40 +239,9 @@ class DkOrientationSensorManager @JvmOverloads constructor(context: Context, lis
 	/**
 	 * See https://en.wikipedia.org/wiki/Low-pass_filter#Discrete-time_realization
 	 */
-	private fun __applyLowFilter(nextVals: FloatArray, curVals: FloatArray) {
-		for (i in min(nextVals.size, curVals.size) - 1 downTo 0) {
-			curVals[i] = nextVals[i]
-			//curVals[i] += smoothAlpha * (nextVals[i] - curVals[i])
-		}
-	}
-
-	// For high pass filter
-	private val ADAPTIVE_ACCEL_FILTER = true
-	val updateFreq = 30f // match this to your update speed
-	val cutOffFreq = 0.9f
-	val RC = 1.0f / cutOffFreq
-	val dt = 1.0f / updateFreq
-	val filterConstant = RC / (dt + RC)
-	val kAccelerometerMinStep = 0.033f
-	val kAccelerometerNoiseAttenuation = 3.0f
-
 	private fun applyLowFilter(nextVals: FloatArray, curVals: FloatArray) {
-		// High pass filter
-		var alpha = filterConstant
-
-		if (ADAPTIVE_ACCEL_FILTER) {
-			val d = clamp(
-				abs(
-					norm(curVals[0], curVals[1], curVals[2]) - norm(nextVals[0], nextVals[1], nextVals[2])
-				) / kAccelerometerMinStep - 1.0f,
-				0.0f,
-				1.0f
-			)
-			alpha = d * filterConstant / kAccelerometerNoiseAttenuation + (1.0f - d) * filterConstant
-		}
-
-		for (index in 0..2) {
-			curVals[index] = alpha * nextVals[index] + (1f - alpha) * curVals[index]
+		for (i in min(nextVals.size, curVals.size) - 1 downTo 0) {
+			curVals[i] += smoothAlpha * (nextVals[i] - curVals[i])
 		}
 	}
 
